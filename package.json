@@ -1,0 +1,15 @@
+{
+  "name": "stream-recorder-app",
+  "version": "1.0.0",
+  "description": "A simple and modern web application for screen recording, audio, and video streaming to the server.",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "multer": "^1.4.2"
+  },
+  "author": "",
+  "license": "ISC"
+}

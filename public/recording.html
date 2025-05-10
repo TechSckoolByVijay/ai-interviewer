@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Interview Session</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .interview-bg {
+            background: linear-gradient(135deg, #1a237e 0%, #283593 100%);
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .interview-layout {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 20px;
+            align-items: start;
+        }
+        .ai-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 60px;
+            border: 4px solid #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .camera-preview {
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body class="interview-bg min-h-screen">
+    <div class="flex h-screen">
+        <!-- Left Sidebar -->
+        <div class="w-1/4 bg-gray-900 bg-opacity-50 p-6 flex flex-col items-center">
+            <img src="/avatar.png" alt="AI Interviewer" class="ai-avatar mb-4">
+            <h2 class="text-white text-xl font-bold mb-2">AI Interviewer</h2>
+            <div class="text-white opacity-75 text-sm mb-8">Professional Interview Assistant</div>
+            
+            <div id="interviewInfo" class="w-full bg-gray-800 rounded-lg p-4 mb-4 text-white">
+                <!-- Interview info here -->
+            </div>
+            
+            <div id="sectionProgress" class="w-full bg-gray-800 rounded-lg p-4 text-white">
+                <h3 class="font-bold mb-2">Progress</h3>
+                <div id="sectionInfo" class="text-sm"></div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 p-8">
+            <div class="max-w-5xl mx-auto">
+                <div class="interview-layout mb-6">
+                    <!-- Question Card -->
+                    <div class="bg-white rounded-xl p-6 shadow-lg">
+                        <div class="flex items-start gap-4 mb-6">
+                            <img src="/avatar.png" alt="AI" class="w-10 h-10 rounded-full">
+                            <div>
+                                <div id="question" class="text-gray-800 text-lg font-medium mb-3"></div>
+                                <audio id="questionAudio" controls class="w-full">
+                                    Your browser does not support audio playback.
+                                </audio>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Camera Preview -->
+                    <div class="camera-preview">
+                        <canvas id="canvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recording Controls -->
+                <div class="bg-white rounded-xl p-6 shadow-lg">
+                    <div class="flex justify-between gap-4 mb-6">
+                        <button id="startBtn" class="flex-1 bg-green-500 text-white py-3 px-6 rounded-lg hover:bg-green-600 transition-all">
+                            Start Interview
+                        </button>
+                        <button id="stopBtn" class="flex-1 bg-red-500 text-white py-3 px-6 rounded-lg hover:bg-red-600 transition-all" disabled>
+                            End Interview
+                        </button>
+                        <button id="nextBtn" class="flex-1 bg-blue-500 text-white py-3 px-6 rounded-lg hover:bg-blue-600 transition-all" disabled>
+                            Next Question
+                        </button>
+                    </div>
+                    
+                    <div id="bottomNav" class="flex justify-center gap-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="scripts/config.js"></script>
+    <script src="scripts/auth.js"></script>
+    <script src="scripts/recording.js"></script>
+</body>
+</html>

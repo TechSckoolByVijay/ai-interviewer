@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interview Platform</title>
+  <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex h-screen">
+
+  <!-- Navigation Bar -->
+  <nav class="bg-gray-800 text-white w-20 flex flex-col items-center py-4 space-y-4">
+    <button id="homeBtn" class="w-12 h-12 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center justify-center">
+      🏠
+    </button>
+    <button id="jdResumeBtn" class="w-12 h-12 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center justify-center">
+      📄
+    </button>
+    <button id="interviewBtn" class="w-12 h-12 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center justify-center">
+      🎥
+    </button>
+    <button id="reportsBtn" class="w-12 h-12 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center justify-center">
+      📊
+    </button>
+    <button id="logoutBtn" class="text-white bg-red-500 hover:bg-red-600 px-4 py-2 rounded">
+      Logout
+    </button>
+  </nav>
+
+  <!-- Main Content -->
+  <div id="content" class="flex-1 p-6 overflow-auto">
+    <!-- Default Home Page -->
+    <div id="homePage" class="hidden">
+      <h1 class="text-3xl font-bold mb-4">Welcome to the Interview Platform</h1>
+      <p class="text-lg">This platform allows you to conduct interviews, manage resumes, and generate reports seamlessly.</p>
+    </div>
+
+    <!-- JD & Resume Page -->
+    <div id="jdResumePage" class="hidden">
+      <h1 class="text-3xl font-bold mb-4">Job Descriptions & Resumes</h1>
+      <p class="text-lg">Upload and manage job descriptions and candidate resumes here. Use advanced filters to find the perfect match.</p>
+    </div>
+
+    <!-- Interview Page -->
+    <div id="interviewPage" class="hidden">
+      <div class="container mx-auto px-4 py-8">
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold mb-4">Screen + Camera Recorder</h2>
+            
+            <!-- New Interview Form -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4">Create New Interview</h3>
+                <div class="flex gap-4">
+                    <input 
+                        type="text" 
+                        id="newInterviewName" 
+                        placeholder="Enter interview name" 
+                        class="flex-1 border rounded-lg px-4 py-2"
+                    >
+                    <button 
+                        id="createInterviewBtn" 
+                        class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600"
+                    >
+                        Create Interview
+                    </button>
+                </div>
+            </div>
+
+            <!-- Previous Interviews List -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold mb-4">Previous Interviews</h3>
+                <div id="interviewsList" class="space-y-4">
+                    <!-- Interviews will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Existing interview controls -->
+        <div id="interviewControls" class="hidden">
+            <canvas id="canvas" class="w-full"></canvas>
+            <audio id="questionAudio" class="hidden"></audio>
+            <div id="question" class="text-xl font-semibold my-4"></div>
+            <div class="flex gap-4 mt-4">
+                <button id="startBtn" class="bg-green-500 text-white px-6 py-2 rounded-lg">Start</button>
+                <button id="stopBtn" class="bg-red-500 text-white px-6 py-2 rounded-lg" disabled>Stop</button>
+                <button id="nextBtn" class="bg-blue-500 text-white px-6 py-2 rounded-lg" disabled>Next</button>
+            </div>
+            <div id="bottomNav" class="flex justify-center mt-4"></div>
+        </div>
+    </div>
+</div>
+
+    <!-- Reports Page -->
+    <div id="reportsPage" class="hidden">
+      <h1 class="text-3xl font-bold mb-4">Reports</h1>
+      <p class="text-lg">Generate detailed reports for interviews, candidate evaluations, and hiring decisions.</p>
+    </div>
+  </div>
+
+  <!-- Load scripts in correct order -->
+  <script src="scripts/config.js"></script>
+  <script src="scripts/auth.js"></script>
+  <script src="scripts/app.js"></script>
+</body>
+</html>
