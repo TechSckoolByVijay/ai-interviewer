@@ -65,8 +65,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             documentList.innerHTML = '';
             
-            [...(data.resumes || []), ...(data.jds || [])].forEach(doc => {
-                const fileName = doc.path.split('/').pop();
+            // Handle resumes
+            (data.resumes || []).forEach(doc => {
+                const fileName = doc.path.split('\\').pop();
                 const item = document.createElement('div');
                 item.className = 'flex justify-between items-center p-4 border-b';
                 item.innerHTML = `
@@ -75,9 +76,28 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p class="text-sm text-gray-500">${new Date(doc.uploaded_at).toLocaleDateString()}</p>
                     </div>
                     <div class="space-x-2">
-                        <button onclick="previewDocument('${doc.path}', '${doc.type}', '${fileName}')" class="btn-preview">Preview</button>
-                        <button onclick="downloadDocument('${doc.type}', ${doc.id})" class="btn-download">Download</button>
-                        <button onclick="deleteDocument('${doc.type}', ${doc.id})" class="btn-delete">Delete</button>
+                        <button onclick="previewDocument('resume', ${doc.id}, '${fileName}')" class="btn-preview">Preview</button>
+                        <button onclick="downloadDocument('resume', ${doc.id})" class="btn-download">Download</button>
+                        <button onclick="deleteDocument('resume', ${doc.id})" class="btn-delete">Delete</button>
+                    </div>
+                `;
+                documentList.appendChild(item);
+            });
+
+            // Handle job descriptions
+            (data.jds || []).forEach(doc => {
+                const fileName = doc.path.split('\\').pop();
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center p-4 border-b';
+                item.innerHTML = `
+                    <div>
+                        <p class="font-semibold">${fileName}</p>
+                        <p class="text-sm text-gray-500">${new Date(doc.uploaded_at).toLocaleDateString()}</p>
+                    </div>
+                    <div class="space-x-2">
+                        <button onclick="previewDocument('jd', ${doc.id}, '${fileName}')" class="btn-preview">Preview</button>
+                        <button onclick="downloadDocument('jd', ${doc.id})" class="btn-download">Download</button>
+                        <button onclick="deleteDocument('jd', ${doc.id})" class="btn-delete">Delete</button>
                     </div>
                 `;
                 documentList.appendChild(item);
@@ -829,14 +849,20 @@ const loadDocuments = async () => {
     });
 };
 
-const previewDocument = async (path, type, fileName) => {
+const previewDocument = async (type, id, fileName) => {
     try {
         const modal = document.getElementById('pdfPreviewModal');
         const viewer = document.getElementById('pdfViewer');
         
-        // Use the preview endpoint instead of direct path
-        const previewUrl = `${API_CONFIG.API_URL}/preview/${type}/${fileName}`;
-        viewer.src = previewUrl;
+        // Use the preview endpoint with correct parameters
+        const previewUrl = `${API_CONFIG.API_URL}/preview/${type}/${id}`;
+        const response = await fetchWithAuth(previewUrl);
+        
+        if (!response.ok) throw new Error('Preview failed');
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        viewer.src = url;
         modal.classList.remove('hidden');
     } catch (error) {
         console.error('Preview error:', error);

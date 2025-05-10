@@ -560,41 +560,43 @@ async def upload_jd(
 ):
     try:
         logger.info(f"Starting JD upload for user: {current_user.id}")
-        logger.debug(f"Received file: {file.filename}")
-
-        # Create upload directory if it doesn't exist
-        upload_path = UPLOAD_DIR / "jd"
-        upload_path.mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Upload directory confirmed: {upload_path}")
-
-        # Save file
-        file_path = upload_path / f"{current_user.id}_jd.pdf"
+        
+        # Check for existing JD
+        existing_jd = db.query(JobDescription).filter(
+            JobDescription.user_id == current_user.id
+        ).first()
+        
+        # Create filename and path using Path object
+        filename = f"{current_user.id}_jd.pdf"
+        file_path = JD_FOLDER / filename
+        
         logger.debug(f"Saving file to: {file_path}")
         
-        with open(file_path, "wb") as buffer:
-            logger.debug("Writing file content...")
-            content = await file.read()
-            buffer.write(content)
+        # Save file using Path object
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        content = await file.read()
+        file_path.write_bytes(content)
         
         logger.debug("File saved successfully, updating database...")
-
-        # Update database
-        try:
+        
+        if existing_jd:
+            # Update existing record
+            existing_jd.file_path = str(file_path)
+        else:
+            # Create new record
             jd = JobDescription(
                 user_id=current_user.id,
                 file_path=str(file_path)
             )
             db.add(jd)
-            db.commit()
-            logger.info("Database updated successfully")
-        except Exception as db_error:
-            logger.error(f"Database error: {str(db_error)}")
-            raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
-
-        return {"message": "File uploaded successfully", "path": str(file_path)}
-
+        
+        db.commit()
+        logger.info("JD upload completed successfully")
+        
+        return {"message": "Job Description uploaded successfully", "path": str(file_path)}
+        
     except Exception as e:
-        logger.error(f"Error in upload_jd: {str(e)}", exc_info=True)
+        logger.error(f"JD upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/documents/{user_id}")
@@ -693,6 +695,44 @@ async def preview_document(
         )
     except Exception as e:
         logger.error(f"Error serving file: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/preview/{doc_type}/{doc_id}")
+async def preview_document(
+    doc_type: str,
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Preview a document"""
+    try:
+        # Get the document based on type
+        if doc_type == "resume":
+            doc = db.query(Resume).filter(
+                Resume.id == doc_id,
+                Resume.user_id == current_user.id
+            ).first()
+        else:
+            doc = db.query(JobDescription).filter(
+                JobDescription.id == doc_id,
+                JobDescription.user_id == current_user.id
+            ).first()
+            
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+        file_path = Path(doc.file_path)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+            
+        return FileResponse(
+            str(file_path),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Preview error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 async def validate_pdf(file: UploadFile):
