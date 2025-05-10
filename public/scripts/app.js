@@ -620,3 +620,118 @@ document.getElementById('createInterviewBtn')?.addEventListener('click', async (
         alert('Failed to create interview');
     }
 });
+
+// Add after existing event listeners
+
+// Handle Resume Upload
+document.getElementById('resumeUploadForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fileInput = document.getElementById('resumeFile');
+    const statusDiv = document.getElementById('resumeStatus');
+    
+    if (!fileInput.files[0]) {
+        statusDiv.textContent = 'Please select a file';
+        statusDiv.className = 'mt-4 text-sm text-red-500';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    try {
+        const response = await fetchWithAuth(`${API_CONFIG.API_URL}/upload/resume`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            statusDiv.textContent = 'Resume uploaded successfully!';
+            statusDiv.className = 'mt-4 text-sm text-green-500';
+            fileInput.value = '';
+        } else {
+            throw new Error('Upload failed');
+        }
+    } catch (error) {
+        statusDiv.textContent = 'Failed to upload resume. Please try again.';
+        statusDiv.className = 'mt-4 text-sm text-red-500';
+        console.error('Resume upload error:', error);
+    }
+});
+
+// Handle Job Description Upload
+const uploadFile = async (file, endpoint) => {
+    console.log(`Starting upload to ${endpoint}`, {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+    });
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = localStorage.getItem('token');
+    console.log('Token present:', !!token);
+
+    try {
+        console.log('Sending request...');
+        const response = await fetch(`${API_CONFIG.API_URL}${endpoint}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        console.log('Response received:', {
+            status: response.status,
+            statusText: response.statusText
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Error response:', errorData);
+            throw new Error(errorData.detail || 'Upload failed');
+        }
+
+        const result = await response.json();
+        console.log('Success response:', result);
+        return result;
+
+    } catch (error) {
+        console.error('Upload error details:', {
+            message: error.message,
+            stack: error.stack,
+            endpoint: endpoint
+        });
+        throw error;
+    }
+};
+
+// Update your form submission handlers:
+document.getElementById('jdUploadForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fileInput = document.getElementById('jdFile');
+    const statusDiv = document.getElementById('jdStatus');
+    
+    if (!fileInput.files[0]) {
+        statusDiv.textContent = 'Please select a file';
+        statusDiv.className = 'mt-4 text-sm text-red-500';
+        return;
+    }
+
+    try {
+        statusDiv.textContent = 'Uploading...';
+        statusDiv.className = 'mt-4 text-sm text-blue-500';
+        
+        const result = await uploadFile(fileInput.files[0], '/upload/jd');
+        
+        statusDiv.textContent = 'Job Description uploaded successfully!';
+        statusDiv.className = 'mt-4 text-sm text-green-500';
+        fileInput.value = '';
+    } catch (error) {
+        statusDiv.textContent = `Upload failed: ${error.message}`;
+        statusDiv.className = 'mt-4 text-sm text-red-500';
+        console.error('JD upload error:', error);
+    }
+});

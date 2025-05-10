@@ -15,6 +15,20 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from typing import Optional
 import tempfile
+import logging
+
+# Setup logging configuration at the top of the file
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+from fastapi import UploadFile, File, Form, HTTPException
+from pathlib import Path
+from .models import Resume, JobDescription
+
+
 
 # Load environment variables
 load_dotenv()
@@ -471,3 +485,99 @@ async def list_audio_files(current_user: User = Depends(get_current_user)):
                 'created': os.path.getctime(file_path)
             })
     return files
+
+# Add constants for file paths
+RESUME_FOLDER = Path("uploads/resumes")
+JD_FOLDER = Path("uploads/jd")
+RESUME_FOLDER.mkdir(parents=True, exist_ok=True)
+JD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+@app.post("/upload/resume")
+async def upload_resume(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        logger.info(f"Starting resume upload for user: {current_user.id}")
+        logger.debug(f"Received file: {file.filename}")
+
+        # Create upload directory if it doesn't exist
+        upload_path = UPLOAD_DIR / "resumes"
+        upload_path.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Upload directory confirmed: {upload_path}")
+
+        # Save file
+        file_path = upload_path / f"{current_user.id}_resume.pdf"
+        logger.debug(f"Saving file to: {file_path}")
+        
+        with open(file_path, "wb") as buffer:
+            logger.debug("Writing file content...")
+            content = await file.read()
+            buffer.write(content)
+        
+        logger.debug("File saved successfully, updating database...")
+
+        # Update database
+        try:
+            resume = Resume(
+                user_id=current_user.id,
+                file_path=str(file_path)
+            )
+            db.add(resume)
+            db.commit()
+            logger.info("Database updated successfully")
+        except Exception as db_error:
+            logger.error(f"Database error: {str(db_error)}")
+            raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+
+        return {"message": "File uploaded successfully", "path": str(file_path)}
+
+    except Exception as e:
+        logger.error(f"Error in upload_resume: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/upload/jd")
+async def upload_jd(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        logger.info(f"Starting JD upload for user: {current_user.id}")
+        logger.debug(f"Received file: {file.filename}")
+
+        # Create upload directory if it doesn't exist
+        upload_path = UPLOAD_DIR / "jd"
+        upload_path.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Upload directory confirmed: {upload_path}")
+
+        # Save file
+        file_path = upload_path / f"{current_user.id}_jd.pdf"
+        logger.debug(f"Saving file to: {file_path}")
+        
+        with open(file_path, "wb") as buffer:
+            logger.debug("Writing file content...")
+            content = await file.read()
+            buffer.write(content)
+        
+        logger.debug("File saved successfully, updating database...")
+
+        # Update database
+        try:
+            jd = JobDescription(
+                user_id=current_user.id,
+                file_path=str(file_path)
+            )
+            db.add(jd)
+            db.commit()
+            logger.info("Database updated successfully")
+        except Exception as db_error:
+            logger.error(f"Database error: {str(db_error)}")
+            raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+
+        return {"message": "File uploaded successfully", "path": str(file_path)}
+
+    except Exception as e:
+        logger.error(f"Error in upload_jd: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

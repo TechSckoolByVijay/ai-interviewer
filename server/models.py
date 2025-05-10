@@ -54,23 +54,22 @@ class InterviewQuestion(Base):
 class JobDescription(Base):
     __tablename__ = "job_descriptions"
     
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
-    title = Column(String, nullable=False)
-    content = Column(String, nullable=False)
     file_path = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    upload_date = Column(DateTime, default=datetime.utcnow)
+    file_name = Column(String)
     
     user = relationship("User", back_populates="job_descriptions")
 
 class Resume(Base):
     __tablename__ = "resumes"
     
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
-    title = Column(String, nullable=False)
-    file_path = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    file_path = Column(String)
+    upload_date = Column(DateTime, default=datetime.utcnow)
+    file_name = Column(String)
     
     user = relationship("User", back_populates="resumes")
 

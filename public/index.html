@@ -38,8 +38,57 @@
 
     <!-- JD & Resume Page -->
     <div id="jdResumePage" class="hidden">
-      <h1 class="text-3xl font-bold mb-4">Job Descriptions & Resumes</h1>
-      <p class="text-lg">Upload and manage job descriptions and candidate resumes here. Use advanced filters to find the perfect match.</p>
+      <h1 class="text-3xl font-bold mb-6">Job Descriptions & Resumes</h1>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Resume Upload Section -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h2 class="text-xl font-semibold mb-4">Upload Resume</h2>
+          <form id="resumeUploadForm" class="space-y-4">
+            <div class="flex flex-col">
+              <label class="text-sm text-gray-600 mb-2">Select your Resume (PDF only)</label>
+              <input 
+                type="file" 
+                id="resumeFile" 
+                accept="application/pdf"
+                class="border rounded-lg p-2"
+                required
+              >
+            </div>
+            <button 
+              type="submit"
+              class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              Upload Resume
+            </button>
+          </form>
+          <div id="resumeStatus" class="mt-4 text-sm"></div>
+        </div>
+
+        <!-- Job Description Upload Section -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h2 class="text-xl font-semibold mb-4">Upload Job Description</h2>
+          <form id="jdUploadForm" class="space-y-4">
+            <div class="flex flex-col">
+              <label class="text-sm text-gray-600 mb-2">Select Job Description (PDF only)</label>
+              <input 
+                type="file" 
+                id="jdFile" 
+                accept="application/pdf"
+                class="border rounded-lg p-2"
+                required
+              >
+            </div>
+            <button 
+              type="submit"
+              class="w-full bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition-colors"
+            >
+              Upload Job Description
+            </button>
+          </form>
+          <div id="jdStatus" class="mt-4 text-sm"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Interview Page -->
