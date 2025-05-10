@@ -28,8 +28,14 @@ let mediaRecorders = {
     combined: null
 };
 let screenChunks = [], cameraChunks = [], audioChunks = [], combinedChunks = [];
-let animationFrameId;
 let isInterviewActive = false;
+
+// Add audio management at the top with other variables
+let currentAudioElement = null;
+
+// Add at the top with other variables
+let videoElement = null;
+let animationFrameId = null;
 
 // Add authentication helper functions
 function isAuthenticated() {
@@ -111,19 +117,26 @@ async function updateQuestionStatus(questionId, status, recordingPath = null) {
     }
 }
 
-// Update displayQuestion function to handle audio playback
+// Update displayQuestion function with better audio management
 async function displayQuestion(index) {
     if (!currentQuestions || !currentQuestions[index]) {
         console.error('Invalid question index or no questions loaded');
         return;
     }
 
-    const question = currentQuestions[index];
-    document.getElementById('question').textContent = question.text;
-    currentQuestionId = question.id;
-
-    // Play question audio
     try {
+        const question = currentQuestions[index];
+        document.getElementById('question').textContent = question.text;
+        currentQuestionId = question.id;
+
+        // Cleanup previous audio
+        if (currentAudioElement) {
+            currentAudioElement.pause();
+            URL.revokeObjectURL(currentAudioElement.src);
+            currentAudioElement = null;
+        }
+
+        // Play question audio
         console.log('Fetching audio for question:', question.text);
         const audioResponse = await fetchWithAuth(
             `${API_CONFIG.API_URL}/get_question_audio?text=${encodeURIComponent(question.text)}`
@@ -135,16 +148,22 @@ async function displayQuestion(index) {
 
         const audioBlob = await audioResponse.blob();
         const audioUrl = URL.createObjectURL(audioBlob);
+        
+        // Use existing audio element from DOM
         const audioElement = document.getElementById('questionAudio');
         audioElement.src = audioUrl;
-        await audioElement.play();
+        currentAudioElement = audioElement;
+        
+        await audioElement.play().catch(err => {
+            console.error('Error playing audio:', err);
+        });
         
         console.log('Question audio playing');
+        updateSectionInfo();
     } catch (error) {
-        console.error('Error playing question audio:', error);
+        console.error('Error displaying question:', error);
+        throw error;
     }
-
-    updateSectionInfo();
 }
 
 // Add replay button handler
@@ -186,11 +205,12 @@ function updateBottomNav(index) {
 // Update next button handler
 document.getElementById('nextBtn')?.addEventListener('click', async () => {
     try {
+        // Stop and upload current recording
         await stopRecordingAndUpload();
-        
+
         // Mark current question as skipped if no recording
         if (currentQuestions[currentQuestionIndex] && !currentQuestions[currentQuestionIndex].recording_path) {
-            await updateQuestionStatus(currentQuestions[currentQuestionIndex].id, 'SKIPPED');
+            await updateQuestionStatus(currentQuestions[currentQuestionIndex].id, QuestionStatus.SKIPPED);
         }
 
         // Move to next question or section
@@ -214,8 +234,6 @@ document.getElementById('nextBtn')?.addEventListener('click', async () => {
             alert('Interview completed! Thank you for your participation.');
             window.location.href = '/index.html';
         }
-        
-        updateSectionInfo();
     } catch (error) {
         console.error('Error handling next question:', error);
         alert('There was an error moving to the next question. Please try again.');
@@ -376,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('stopBtn')?.addEventListener('click', async () => {
         try {
             await stopRecordingAndUpload();
-            cleanupMediaStreams();
+            cleanupResources();
             document.getElementById('startBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
             document.getElementById('nextBtn').disabled = true;
@@ -386,47 +404,60 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Add camera display function
-function setupCameraDisplay() {
+// Update camera display setup
+async function setupCameraDisplay() {
     try {
         if (!mediaStreams.camera) {
             console.error('Camera stream not initialized');
             return;
         }
 
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
+        // Create and setup video element for display
+        if (!videoElement) {
+            videoElement = document.createElement('video');
+            videoElement.autoplay = true;
+            videoElement.playsInline = true;
+            videoElement.muted = true;
+        }
+
+        // Set up canvas
+        canvas = document.getElementById('canvas');
+        if (!canvas) {
+            console.error('Canvas element not found');
+            return;
+        }
         
-        // Set canvas size to match container
+        ctx = canvas.getContext('2d');
         canvas.width = 280;
         canvas.height = 210;
 
-        function drawCameraFeed() {
+        // Connect camera stream to video element
+        videoElement.srcObject = mediaStreams.camera;
+        await videoElement.play();
+
+        // Start drawing loop
+        function drawFrame() {
             if (mediaStreams.camera.active) {
-                const video = document.createElement('video');
-                video.srcObject = mediaStreams.camera;
-                video.play();
+                const { videoWidth, videoHeight } = videoElement;
+                const scale = Math.min(
+                    canvas.width / videoWidth,
+                    canvas.height / videoHeight
+                );
+                
+                const drawWidth = videoWidth * scale;
+                const drawHeight = videoHeight * scale;
+                const x = (canvas.width - drawWidth) / 2;
+                const y = (canvas.height - drawHeight) / 2;
 
-                video.onloadedmetadata = () => {
-                    const { videoWidth, videoHeight } = video;
-                    const scale = Math.min(
-                        canvas.width / videoWidth,
-                        canvas.height / videoHeight
-                    );
-                    
-                    const drawWidth = videoWidth * scale;
-                    const drawHeight = videoHeight * scale;
-                    const x = (canvas.width - drawWidth) / 2;
-                    const y = (canvas.height - drawHeight) / 2;
-
-                    ctx.drawImage(video, x, y, drawWidth, drawHeight);
-                };
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(videoElement, x, y, drawWidth, drawHeight);
             }
-            requestAnimationFrame(drawCameraFeed);
+            animationFrameId = requestAnimationFrame(drawFrame);
         }
 
-        drawCameraFeed();
-        console.log('Camera display initialized');
+        drawFrame();
+        console.log('Camera display initialized successfully');
+
     } catch (error) {
         console.error('Error setting up camera display:', error);
     }
@@ -437,15 +468,24 @@ async function initializeInterview() {
     try {
         console.log('Initializing interview...');
         
-        if (!mediaStreams.screen) {
-            mediaStreams.screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        }
+        // Get camera stream first
         if (!mediaStreams.camera) {
             mediaStreams.camera = await navigator.mediaDevices.getUserMedia({ 
-                video: { width: 1280, height: 720 },
+                video: { 
+                    width: 1280, 
+                    height: 720,
+                    facingMode: 'user'
+                },
                 audio: false 
             });
-            setupCameraDisplay(); // Add camera display setup
+            
+            // Setup camera display immediately after getting stream
+            await setupCameraDisplay();
+        }
+
+        // Get other streams
+        if (!mediaStreams.screen) {
+            mediaStreams.screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
         }
         if (!mediaStreams.audio) {
             mediaStreams.audio = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -501,9 +541,10 @@ async function startRecording() {
     }
 }
 
+// Update stopRecordingAndUpload
 async function stopRecordingAndUpload() {
     try {
-        // Stop only the recorders
+        // Only stop recorders, keep streams active for next recording
         Object.values(mediaRecorders).forEach(recorder => {
             if (recorder && recorder.state === 'recording') {
                 recorder.stop();
@@ -511,6 +552,9 @@ async function stopRecordingAndUpload() {
         });
 
         await uploadRecordings();
+
+        // Clear recorder references but keep streams
+        mediaRecorders = { screen: null, camera: null, audio: null, combined: null };
     } catch (error) {
         console.error('Error in stopRecordingAndUpload:', error);
         throw error;
@@ -527,3 +571,102 @@ function cleanupMediaStreams() {
     mediaRecorders = { screen: null, camera: null, audio: null, combined: null };
     isInterviewActive = false;
 }
+
+// Add uploadRecordings function after existing media handling functions
+async function uploadRecordings() {
+    try {
+        console.log('Starting upload process...');
+        
+        // Wait for data to be available
+        await Promise.all([
+            new Promise(resolve => mediaRecorders.screen.addEventListener('dataavailable', resolve, { once: true })),
+            new Promise(resolve => mediaRecorders.camera.addEventListener('dataavailable', resolve, { once: true })),
+            new Promise(resolve => mediaRecorders.audio.addEventListener('dataavailable', resolve, { once: true })),
+            new Promise(resolve => mediaRecorders.combined.addEventListener('dataavailable', resolve, { once: true }))
+        ]);
+
+        // Create files from chunks
+        const files = {
+            screen: new File([new Blob(screenChunks)], `${currentUserId}-${currentInterviewId}-${currentQuestionId}_screen.webm`),
+            camera: new File([new Blob(cameraChunks)], `${currentUserId}-${currentInterviewId}-${currentQuestionId}_camera.webm`),
+            audio: new File([new Blob(audioChunks)], `${currentUserId}-${currentInterviewId}-${currentQuestionId}_audio.webm`),
+            combined: new File([new Blob(combinedChunks)], `${currentUserId}-${currentInterviewId}-${currentQuestionId}_combined.webm`)
+        };
+
+        // Upload each file
+        for (const [type, file] of Object.entries(files)) {
+            if (file.size === 0) {
+                console.warn(`${type} recording is empty, skipping upload`);
+                continue;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('interview_id', currentInterviewId);
+            formData.append('question_id', currentQuestionId);
+            formData.append('file_type', type);
+
+            console.log(`Uploading ${type} file:`, file.name);
+            const response = await fetchWithAuth(`${API_CONFIG.API_URL}/upload`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to upload ${type} file: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log(`${type} file uploaded successfully:`, data);
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error uploading recordings:', error);
+        throw error;
+    }
+}
+
+// Add cleanup on interview end
+// Update cleanup function
+function cleanupResources() {
+    // Stop the animation frame
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+
+    // Clean up video element
+    if (videoElement) {
+        videoElement.pause();
+        videoElement.srcObject = null;
+        videoElement = null;
+    }
+
+    // Clean up canvas
+    if (ctx && canvas) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // Clean up media resources
+    Object.values(mediaRecorders).forEach(recorder => {
+        if (recorder && recorder.state === 'recording') {
+            recorder.stop();
+        }
+    });
+
+    Object.values(mediaStreams).forEach(stream => {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+    });
+
+    mediaStreams = { screen: null, camera: null, audio: null };
+    mediaRecorders = { screen: null, camera: null, audio: null, combined: null };
+    isInterviewActive = false;
+}
+
+// Add cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    cleanupResources();
+});
