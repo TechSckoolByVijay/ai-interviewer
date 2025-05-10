@@ -3,6 +3,92 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = '/login.html';
         return;
     }
+
+    // Handle Resume Upload
+    document.getElementById('resumeUploadForm')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fileInput = document.getElementById('resumeFile');
+        const statusDiv = document.getElementById('resumeStatus');
+        
+        if (!fileInput.files[0]) {
+            statusDiv.textContent = 'Please select a file';
+            statusDiv.className = 'mt-4 text-sm text-red-500';
+            return;
+        }
+
+        try {
+            await uploadFile(fileInput.files[0], '/upload/resume');
+            statusDiv.textContent = 'Resume uploaded successfully!';
+            statusDiv.className = 'mt-4 text-sm text-green-500';
+            fileInput.value = '';
+            await loadDocuments();
+        } catch (error) {
+            statusDiv.textContent = 'Failed to upload resume. Please try again.';
+            statusDiv.className = 'mt-4 text-sm text-red-500';
+            console.error('Resume upload error:', error);
+        }
+    });
+
+    // Handle Job Description Upload
+    document.getElementById('jdUploadForm')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fileInput = document.getElementById('jdFile');
+        const statusDiv = document.getElementById('jdStatus');
+        
+        if (!fileInput.files[0]) {
+            statusDiv.textContent = 'Please select a file';
+            statusDiv.className = 'mt-4 text-sm text-red-500';
+            return;
+        }
+
+        try {
+            await uploadFile(fileInput.files[0], '/upload/jd');
+            statusDiv.textContent = 'Job Description uploaded successfully!';
+            statusDiv.className = 'mt-4 text-sm text-green-500';
+            fileInput.value = '';
+            await loadDocuments();
+        } catch (error) {
+            statusDiv.textContent = 'Failed to upload JD. Please try again.';
+            statusDiv.className = 'mt-4 text-sm text-red-500';
+            console.error('JD upload error:', error);
+        }
+    });
+
+    // Document management functions
+    const loadDocuments = async () => {
+        try {
+            const response = await fetchWithAuth(`${API_CONFIG.API_URL}/documents/current`);
+            const data = await response.json();
+            
+            const documentList = document.getElementById('documentList');
+            if (!documentList) return;
+            
+            documentList.innerHTML = '';
+            
+            [...(data.resumes || []), ...(data.jds || [])].forEach(doc => {
+                const fileName = doc.path.split('/').pop();
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center p-4 border-b';
+                item.innerHTML = `
+                    <div>
+                        <p class="font-semibold">${fileName}</p>
+                        <p class="text-sm text-gray-500">${new Date(doc.uploaded_at).toLocaleDateString()}</p>
+                    </div>
+                    <div class="space-x-2">
+                        <button onclick="previewDocument('${doc.path}', '${doc.type}', '${fileName}')" class="btn-preview">Preview</button>
+                        <button onclick="downloadDocument('${doc.type}', ${doc.id})" class="btn-download">Download</button>
+                        <button onclick="deleteDocument('${doc.type}', ${doc.id})" class="btn-delete">Delete</button>
+                    </div>
+                `;
+                documentList.appendChild(item);
+            });
+        } catch (error) {
+            console.error('Error loading documents:', error);
+        }
+    };
+
+    // Initial load of documents
+    loadDocuments();
 });
 
 let canvas, ctx;
@@ -34,6 +120,65 @@ let currentSectionIndex = 0;
 let currentQuestionIndex = 0; // Remove duplicate declarations
 const sections = ["strengths", "weaknesses", "future", "challenges"];
 let currentQuestions = [];
+
+// Utility functions
+const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+};
+
+const showProgress = (elementId, progress) => {
+    const progressBar = document.getElementById(elementId).querySelector('div');
+    if (progressBar) {
+        progressBar.style.width = `${progress}%`;
+        progressBar.textContent = `${progress}%`;
+    }
+};
+
+const uploadFile = async (file, endpoint) => {
+    console.log(`Starting upload to ${endpoint}`, {
+        fileName: file.name,
+        fileSize: formatFileSize(file.size),
+        fileType: file.type
+    });
+
+    const progressContainer = document.getElementById('uploadProgress');
+    progressContainer.classList.remove('hidden');
+    
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+                const progress = Math.round((e.loaded / e.total) * 100);
+                showProgress('uploadProgress', progress);
+            }
+        };
+        
+        xhr.onload = () => {
+            progressContainer.classList.add('hidden');
+            if (xhr.status === 200) {
+                resolve(JSON.parse(xhr.response));
+                loadDocuments();
+            } else {
+                reject(new Error(xhr.response || 'Upload failed'));
+            }
+        };
+        
+        xhr.onerror = () => {
+            progressContainer.classList.add('hidden');
+            reject(new Error('Network Error'));
+        };
+        
+        const token = localStorage.getItem('token');
+        xhr.open('POST', `${API_CONFIG.API_URL}${endpoint}`);
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.send(formData);
+    });
+};
 
 // Navigation logic
 function showPage(page) {
@@ -549,7 +694,7 @@ async function loadInterviews() {
     } catch (error) {
         console.error('Error loading interviews:', error);
     }
-}
+};
 
 // Add event listener for creating new interview
 document.getElementById('createInterviewBtn')?.addEventListener('click', async () => {
@@ -591,36 +736,6 @@ async function startExistingInterview(interviewId) {
     window.location.href = `/recording.html?id=${interviewId}`;
 }
 
-// Modify the create interview button handler
-document.getElementById('createInterviewBtn')?.addEventListener('click', async () => {
-    const nameInput = document.getElementById('newInterviewName');
-    const friendlyName = nameInput.value.trim();
-    
-    if (!friendlyName) {
-        alert('Please enter an interview name');
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_CONFIG.API_URL}/interviews`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ friendly_name: friendlyName })
-        });
-
-        const interview = await response.json();
-        nameInput.value = '';
-        await loadInterviews(); // Refresh the list
-        startExistingInterview(interview.id); // Start the new interview
-    } catch (error) {
-        console.error('Error creating interview:', error);
-        alert('Failed to create interview');
-    }
-});
-
 // Add after existing event listeners
 
 // Handle Resume Upload
@@ -660,55 +775,6 @@ document.getElementById('resumeUploadForm')?.addEventListener('submit', async (e
 });
 
 // Handle Job Description Upload
-const uploadFile = async (file, endpoint) => {
-    console.log(`Starting upload to ${endpoint}`, {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-    });
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const token = localStorage.getItem('token');
-    console.log('Token present:', !!token);
-
-    try {
-        console.log('Sending request...');
-        const response = await fetch(`${API_CONFIG.API_URL}${endpoint}`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData
-        });
-
-        console.log('Response received:', {
-            status: response.status,
-            statusText: response.statusText
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Error response:', errorData);
-            throw new Error(errorData.detail || 'Upload failed');
-        }
-
-        const result = await response.json();
-        console.log('Success response:', result);
-        return result;
-
-    } catch (error) {
-        console.error('Upload error details:', {
-            message: error.message,
-            stack: error.stack,
-            endpoint: endpoint
-        });
-        throw error;
-    }
-};
-
-// Update your form submission handlers:
 document.getElementById('jdUploadForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fileInput = document.getElementById('jdFile');
@@ -735,3 +801,75 @@ document.getElementById('jdUploadForm')?.addEventListener('submit', async (e) =>
         console.error('JD upload error:', error);
     }
 });
+
+// Add document list and management functions
+const loadDocuments = async () => {
+    const response = await fetchWithAuth(`${API_CONFIG.API_URL}/documents/current`); // Changed endpoint
+    const data = await response.json();
+    
+    const documentList = document.getElementById('documentList');
+    documentList.innerHTML = '';
+    
+    [...(data.resumes || []), ...(data.jds || [])].forEach(doc => {
+        const fileName = doc.path.split('/').pop();
+        const item = document.createElement('div');
+        item.className = 'flex justify-between items-center p-4 border-b';
+        item.innerHTML = `
+            <div>
+                <p class="font-semibold">${fileName}</p>
+                <p class="text-sm text-gray-500">${new Date(doc.uploaded_at).toLocaleDateString()}</p>
+            </div>
+            <div class="space-x-2">
+                <button onclick="previewDocument('${doc.path}', '${doc.type}', '${fileName}')" class="btn-preview">Preview</button>
+                <button onclick="downloadDocument('${doc.type}', ${doc.id})" class="btn-download">Download</button>
+                <button onclick="deleteDocument('${doc.type}', ${doc.id})" class="btn-delete">Delete</button>
+            </div>
+        `;
+        documentList.appendChild(item);
+    });
+};
+
+const previewDocument = async (path, type, fileName) => {
+    try {
+        const modal = document.getElementById('pdfPreviewModal');
+        const viewer = document.getElementById('pdfViewer');
+        
+        // Use the preview endpoint instead of direct path
+        const previewUrl = `${API_CONFIG.API_URL}/preview/${type}/${fileName}`;
+        viewer.src = previewUrl;
+        modal.classList.remove('hidden');
+    } catch (error) {
+        console.error('Preview error:', error);
+        alert('Failed to preview document');
+    }
+};
+
+const deleteDocument = async (type, id) => {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+    
+    await fetchWithAuth(`${API_CONFIG.API_URL}/documents/${type}/${id}`, {
+        method: 'DELETE'
+    });
+    await loadDocuments();
+};
+
+// Add these document management functions
+const downloadDocument = async (type, id) => {
+    try {
+        const response = await fetchWithAuth(`${API_CONFIG.API_URL}/download/${type}/${id}`);
+        if (!response.ok) throw new Error('Download failed');
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${type}_${id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (error) {
+        console.error('Download error:', error);
+        alert('Failed to download document');
+    }
+};

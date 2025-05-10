@@ -1,0 +1,19 @@
+.btn-preview, .btn-download, .btn-delete {
+    @apply px-3 py-1 rounded text-sm;
+}
+
+.btn-preview {
+    @apply bg-blue-500 text-white hover:bg-blue-600;
+}
+
+.btn-download {
+    @apply bg-green-500 text-white hover:bg-green-600;
+}
+
+.btn-delete {
+    @apply bg-red-500 text-white hover:bg-red-600;
+}
+
+#uploadProgress {
+    transition: width 0.3s ease-in-out;
+}

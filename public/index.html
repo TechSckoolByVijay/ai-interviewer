@@ -55,6 +55,9 @@
                 required
               >
             </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4 hidden" id="uploadProgress">
+              <div class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
             <button 
               type="submit"
               class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
@@ -79,6 +82,9 @@
                 required
               >
             </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4 hidden" id="uploadProgress">
+              <div class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
             <button 
               type="submit"
               class="w-full bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition-colors"
@@ -88,6 +94,11 @@
           </form>
           <div id="jdStatus" class="mt-4 text-sm"></div>
         </div>
+      </div>
+
+      <div class="mt-8">
+        <h2 class="text-xl font-semibold mb-4">Uploaded Documents</h2>
+        <div id="documentList" class="bg-white rounded-lg shadow-md"></div>
       </div>
     </div>
 
@@ -144,6 +155,18 @@
     <div id="reportsPage" class="hidden">
       <h1 class="text-3xl font-bold mb-4">Reports</h1>
       <p class="text-lg">Generate detailed reports for interviews, candidate evaluations, and hiring decisions.</p>
+    </div>
+  </div>
+
+  <!-- PDF Preview Modal -->
+  <div id="pdfPreviewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+    <div class="bg-white p-4 rounded-lg w-3/4 h-3/4">
+        <div class="flex justify-between mb-4">
+            <h3 class="text-lg font-semibold">Document Preview</h3>
+            <button onclick="document.getElementById('pdfPreviewModal').classList.add('hidden')"
+                    class="text-gray-500 hover:text-gray-700">&times;</button>
+        </div>
+        <iframe id="pdfViewer" class="w-full h-full" frameborder="0"></iframe>
     </div>
   </div>
 

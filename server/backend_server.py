@@ -13,9 +13,10 @@ from .auth import get_current_user, oauth2_scheme
 from .auth import router as auth_router
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import tempfile
 import logging
+import magic  # for file type validation
 
 # Setup logging configuration at the top of the file
 logging.basicConfig(
@@ -48,9 +49,17 @@ app.add_middleware(
 app.include_router(auth_router)
 
 # Directory to store uploaded files and generated audio
-UPLOAD_FOLDER = "uploads"
+UPLOAD_FOLDER = Path("uploads")
+RESUMES_FOLDER = UPLOAD_FOLDER / "resumes"
+JD_FOLDER = UPLOAD_FOLDER / "jd"
+
+# Create directories with proper permissions
+for folder in [UPLOAD_FOLDER, RESUMES_FOLDER, JD_FOLDER]:
+    folder.mkdir(parents=True, exist_ok=True)
+    # On Windows, ensure the directory is writable
+    os.chmod(str(folder), 0o777)
+
 AUDIO_FOLDER = os.path.join(os.path.dirname(__file__), "..", "audio")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
 print(f"Audio files directory: {AUDIO_FOLDER}")  # Add this for debugging
@@ -80,6 +89,9 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Mount the uploads directory
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# Mount the uploads directory to serve files
+app.mount("/files", StaticFiles(directory="uploads"), name="files")
 
 @app.post("/interviews/create")
 async def create_interview(
@@ -492,6 +504,9 @@ JD_FOLDER = Path("uploads/jd")
 RESUME_FOLDER.mkdir(parents=True, exist_ok=True)
 JD_FOLDER.mkdir(parents=True, exist_ok=True)
 
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB limit
+ALLOWED_MIME_TYPES = ['application/pdf']
+
 @app.post("/upload/resume")
 async def upload_resume(
     file: UploadFile = File(...),
@@ -500,41 +515,41 @@ async def upload_resume(
 ):
     try:
         logger.info(f"Starting resume upload for user: {current_user.id}")
-        logger.debug(f"Received file: {file.filename}")
-
-        # Create upload directory if it doesn't exist
-        upload_path = UPLOAD_DIR / "resumes"
-        upload_path.mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Upload directory confirmed: {upload_path}")
-
-        # Save file
-        file_path = upload_path / f"{current_user.id}_resume.pdf"
+        
+        # Create filename and path using Path object
+        filename = f"{current_user.id}_resume.pdf"
+        file_path = RESUMES_FOLDER / filename
+        
         logger.debug(f"Saving file to: {file_path}")
         
-        with open(file_path, "wb") as buffer:
-            logger.debug("Writing file content...")
-            content = await file.read()
-            buffer.write(content)
+        # Save file using Path object
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        content = await file.read()
+        file_path.write_bytes(content)
         
         logger.debug("File saved successfully, updating database...")
-
-        # Update database
-        try:
+        
+        # Check for existing resume
+        existing_resume = db.query(Resume).filter(
+            Resume.user_id == current_user.id
+        ).first()
+        
+        if existing_resume:
+            existing_resume.file_path = str(file_path)
+        else:
             resume = Resume(
                 user_id=current_user.id,
                 file_path=str(file_path)
             )
             db.add(resume)
-            db.commit()
-            logger.info("Database updated successfully")
-        except Exception as db_error:
-            logger.error(f"Database error: {str(db_error)}")
-            raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
-
-        return {"message": "File uploaded successfully", "path": str(file_path)}
-
+            
+        db.commit()
+        logger.info("Resume upload completed successfully")
+        
+        return {"message": "Resume uploaded successfully", "path": str(file_path)}
+        
     except Exception as e:
-        logger.error(f"Error in upload_resume: {str(e)}", exc_info=True)
+        logger.error(f"Resume upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/upload/jd")
@@ -581,3 +596,115 @@ async def upload_jd(
     except Exception as e:
         logger.error(f"Error in upload_jd: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/documents/{user_id}")
+async def list_documents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List all documents uploaded by user"""
+    resumes = db.query(Resume).filter(Resume.user_id == current_user.id).all()
+    jds = db.query(JobDescription).filter(JobDescription.user_id == current_user.id).all()
+    
+    return {
+        "resumes": [{"id": r.id, "path": r.file_path, "uploaded_at": r.created_at} for r in resumes],
+        "jds": [{"id": j.id, "path": j.file_path, "uploaded_at": j.created_at} for j in jds]
+    }
+
+@app.get("/download/{doc_type}/{doc_id}")
+async def download_document(
+    doc_type: str,
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Get the document based on type
+        if doc_type == "resume":
+            doc = db.query(Resume).filter(
+                Resume.id == doc_id,
+                Resume.user_id == current_user.id
+            ).first()
+        else:
+            doc = db.query(JobDescription).filter(
+                JobDescription.id == doc_id,
+                JobDescription.user_id == current_user.id
+            ).first()
+            
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+        file_path = Path(doc.file_path)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+            
+        return FileResponse(
+            str(file_path),
+            media_type="application/pdf",
+            filename=file_path.name
+        )
+        
+    except Exception as e:
+        logger.error(f"Download error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/documents/{doc_type}/{doc_id}")
+async def delete_document(
+    doc_type: str,
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a specific document"""
+    if doc_type == "resume":
+        doc = db.query(Resume).filter(Resume.id == doc_id, Resume.user_id == current_user.id).first()
+    else:
+        doc = db.query(JobDescription).filter(JobDescription.id == doc_id, JobDescription.user_id == current_user.id).first()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Delete file
+    if os.path.exists(doc.file_path):
+        os.remove(doc.file_path)
+    
+    # Delete DB record
+    db.delete(doc)
+    db.commit()
+    
+    return {"message": "Document deleted successfully"}
+
+@app.get("/preview/{doc_type}/{file_name}")
+async def preview_document(
+    doc_type: str,
+    file_name: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Serve document for preview"""
+    try:
+        file_path = os.path.join("uploads", doc_type, file_name)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="File not found")
+            
+        return FileResponse(
+            file_path,
+            media_type="application/pdf",
+            filename=file_name
+        )
+    except Exception as e:
+        logger.error(f"Error serving file: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def validate_pdf(file: UploadFile):
+    """Validate PDF file type and size"""
+    # Check file size
+    content = await file.read()
+    await file.seek(0)  # Reset file pointer
+    
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 5MB limit")
+    
+    # Check file type
+    mime_type = magic.from_buffer(content, mime=True)
+    if mime_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
