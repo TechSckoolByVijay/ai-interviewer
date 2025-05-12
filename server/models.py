@@ -4,12 +4,13 @@ from datetime import datetime
 import enum
 from .database import Base
 from sqlalchemy.sql import func
+from enum import Enum as PyEnum
 
 class UserType(enum.Enum):
     ADMIN = "admin"
     CANDIDATE = "candidate"
 
-class QuestionStatus(enum.Enum):
+class QuestionStatus(str, PyEnum):
     NOT_ATTEMPTED = "NOT_ATTEMPTED"
     SKIPPED = "SKIPPED"
     ANSWERED = "ANSWERED"
@@ -41,12 +42,12 @@ class Interview(Base):
 class InterviewQuestion(Base):
     __tablename__ = "interview_questions"
     
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
     interview_id = Column(Integer, ForeignKey("interviews.id"))
-    section = Column(String(50), nullable=False)
-    question_text = Column(String(500), nullable=False)
-    status = Column(Enum(QuestionStatus), default=QuestionStatus.NOT_ATTEMPTED)
-    recording_path = Column(String(500), nullable=True)
+    section = Column(String)
+    question_text = Column(String)
+    status = Column(Enum(QuestionStatus))
+    recording_path = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

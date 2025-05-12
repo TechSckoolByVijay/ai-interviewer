@@ -17,17 +17,15 @@ from typing import Optional, List
 import tempfile
 import logging
 import magic  # for file type validation
+from .models import Resume, JobDescription
+
 
 # Setup logging configuration at the top of the file
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-from fastapi import UploadFile, File, Form, HTTPException
-from pathlib import Path
-from .models import Resume, JobDescription
 
 
 
@@ -52,6 +50,15 @@ app.include_router(auth_router)
 UPLOAD_FOLDER = Path("uploads")
 RESUMES_FOLDER = UPLOAD_FOLDER / "resumes"
 JD_FOLDER = UPLOAD_FOLDER / "jd"
+
+# Add constants for file paths
+RESUME_FOLDER = Path("uploads/resumes")
+JD_FOLDER = Path("uploads/jd")
+RESUME_FOLDER.mkdir(parents=True, exist_ok=True)
+JD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB limit
+ALLOWED_MIME_TYPES = ['application/pdf']
 
 # Create directories with proper permissions
 for folder in [UPLOAD_FOLDER, RESUMES_FOLDER, JD_FOLDER]:
@@ -96,118 +103,118 @@ async def create_interview(
     db.refresh(interview)
     return interview
 
-@app.get("/get_question")
-async def get_question(
-    interview_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    interview = db.query(Interview).filter(
-        Interview.id == interview_id,
-        Interview.user_id == current_user.id
-    ).first()
-    if not interview:
-        raise HTTPException(status_code=404, detail="Interview not found")
+# @app.get("/get_question")
+# async def get_question(
+#     interview_id: int,
+#     current_user: User = Depends(get_current_user),
+#     db: Session = Depends(get_db)
+# ):
+#     interview = db.query(Interview).filter(
+#         Interview.id == interview_id,
+#         Interview.user_id == current_user.id
+#     ).first()
+#     if not interview:
+#         raise HTTPException(status_code=404, detail="Interview not found")
 
-    # Generate the next question (replace with AI logic)
-    question = f"Hello, User {current_user.id}. What are your strengths?"
+#     # Generate the next question (replace with AI logic)
+#     question = f"Hello, User {current_user.id}. What are your strengths?"
 
-    # Generate TTS audio
-    audio_file_path = os.path.join(AUDIO_FOLDER, f"{current_user.id}_question.mp3")
-    try:
-        tts = gTTS(text=question, lang="en")
-        tts.save(audio_file_path)
-        print(f"Audio generated: {audio_file_path}")
-    except Exception as e:
-        print(f"Error generating audio: {e}")
-        # Fallback to default audio
-        question = "Apologies, I did not get what question to ask."
-        audio_file_path = os.path.join(AUDIO_FOLDER, "default_question.mp3")
-        if not os.path.exists(audio_file_path):
-            tts = gTTS(text=question, lang="en")
-            tts.save(audio_file_path)
+#     # Generate TTS audio
+#     audio_file_path = os.path.join(AUDIO_FOLDER, f"{current_user.id}_question.mp3")
+#     try:
+#         tts = gTTS(text=question, lang="en")
+#         tts.save(audio_file_path)
+#         print(f"Audio generated: {audio_file_path}")
+#     except Exception as e:
+#         print(f"Error generating audio: {e}")
+#         # Fallback to default audio
+#         question = "Apologies, I did not get what question to ask."
+#         audio_file_path = os.path.join(AUDIO_FOLDER, "default_question.mp3")
+#         if not os.path.exists(audio_file_path):
+#             tts = gTTS(text=question, lang="en")
+#             tts.save(audio_file_path)
 
-    # Store in database
-    question_record = InterviewQuestion(
-        interview_id=interview_id,
-        question_text=question,
-        status=QuestionStatus.NOT_ATTEMPTED
-    )
-    db.add(question_record)
-    db.commit()
+#     # Store in database
+#     question_record = InterviewQuestion(
+#         interview_id=interview_id,
+#         question_text=question,
+#         status=QuestionStatus.NOT_ATTEMPTED
+#     )
+#     db.add(question_record)
+#     db.commit()
 
-    return {"question": question, "audio_url": f"/audio/{os.path.basename(audio_file_path)}"}
+#     return {"question": question, "audio_url": f"/audio/{os.path.basename(audio_file_path)}"}
 
-@app.get("/get_questions")
-async def get_questions(user_id: str):
-    """
-    Generate six AI-driven questions and return them in one response.
-    """
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID is required")
+# @app.get("/get_questions")
+# async def get_questions(user_id: str):
+#     """
+#     Generate six AI-driven questions and return them in one response.
+#     """
+#     if not user_id:
+#         raise HTTPException(status_code=400, detail="User ID is required")
 
-    # Generate six questions (replace with AI logic)
-    questions = [
-        f"Hello, User {user_id}. What are your strengths?",
-        f"User {user_id}, what are your weaknesses?",
-        f"User {user_id}, where do you see yourself in 5 years?",
-        f"User {user_id}, why should we hire you?",
-        f"User {user_id}, tell us about a challenging situation you faced.",
-        f"User {user_id}, do you have any questions for us?"
-    ]
+#     # Generate six questions (replace with AI logic)
+#     questions = [
+#         f"Hello, User {user_id}. What are your strengths?",
+#         f"User {user_id}, what are your weaknesses?",
+#         f"User {user_id}, where do you see yourself in 5 years?",
+#         f"User {user_id}, why should we hire you?",
+#         f"User {user_id}, tell us about a challenging situation you faced.",
+#         f"User {user_id}, do you have any questions for us?"
+#     ]
 
-    return {"questions": questions}
-
-
-@app.post("/process_recording")
-async def process_recording(
-    user_id: str = Form(...),
-    file: UploadFile = File(...)
-):
-    """
-    Process the uploaded recording and prepare the next question.
-    """
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID is required")
-
-    # Save the uploaded file
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # Process the recording (replace with AI logic)
-    print(f"Processing file: {file_path} for user {user_id}")
-
-    # Generate the next question based on the response
-    next_question = f"Thank you for your response, User {user_id}. What are your weaknesses?"
-
-    # Generate TTS audio for the next question
-    audio_file_path = os.path.join(AUDIO_FOLDER, f"{user_id}_next_question.mp3")
-    try:
-        tts = gTTS(text=next_question, lang="en")
-        tts.save(audio_file_path)
-        print(f"Audio generated: {audio_file_path}")
-    except Exception as e:
-        print(f"Error generating audio: {e}")
-        # Fallback to default audio
-        next_question = "Apologies, I did not get what question to ask."
-        audio_file_path = os.path.join(AUDIO_FOLDER, "default_question.mp3")
-        if not os.path.exists(audio_file_path):
-            tts = gTTS(text=next_question, lang="en")
-            tts.save(audio_file_path)
-
-    return {"next_question": next_question, "audio_url": f"/audio/{os.path.basename(audio_file_path)}"}
+#     return {"questions": questions}
 
 
-@app.get("/audio/{filename}")
-async def get_audio(filename: str):
-    """
-    Serve the generated audio file.
-    """
-    file_path = os.path.join(AUDIO_FOLDER, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Audio file not found")
-    return FileResponse(file_path)
+# @app.post("/process_recording")
+# async def process_recording(
+#     user_id: str = Form(...),
+#     file: UploadFile = File(...)
+# ):
+#     """
+#     Process the uploaded recording and prepare the next question.
+#     """
+#     if not user_id:
+#         raise HTTPException(status_code=400, detail="User ID is required")
+
+#     # Save the uploaded file
+#     file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+#     with open(file_path, "wb") as buffer:
+#         shutil.copyfileobj(file.file, buffer)
+
+#     # Process the recording (replace with AI logic)
+#     print(f"Processing file: {file_path} for user {user_id}")
+
+#     # Generate the next question based on the response
+#     next_question = f"Thank you for your response, User {user_id}. What are your weaknesses?"
+
+#     # Generate TTS audio for the next question
+#     audio_file_path = os.path.join(AUDIO_FOLDER, f"{user_id}_next_question.mp3")
+#     try:
+#         tts = gTTS(text=next_question, lang="en")
+#         tts.save(audio_file_path)
+#         print(f"Audio generated: {audio_file_path}")
+#     except Exception as e:
+#         print(f"Error generating audio: {e}")
+#         # Fallback to default audio
+#         next_question = "Apologies, I did not get what question to ask."
+#         audio_file_path = os.path.join(AUDIO_FOLDER, "default_question.mp3")
+#         if not os.path.exists(audio_file_path):
+#             tts = gTTS(text=next_question, lang="en")
+#             tts.save(audio_file_path)
+
+#     return {"next_question": next_question, "audio_url": f"/audio/{os.path.basename(audio_file_path)}"}
+
+
+# @app.get("/audio/{filename}")
+# async def get_audio(filename: str):
+#     """
+#     Serve the generated audio file.
+#     """
+#     file_path = os.path.join(AUDIO_FOLDER, filename)
+#     if not os.path.exists(file_path):
+#         raise HTTPException(status_code=404, detail="Audio file not found")
+#     return FileResponse(file_path)
 
 
 @app.get("/get_section_questions")
@@ -521,14 +528,6 @@ async def list_audio_files(current_user: User = Depends(get_current_user)):
             })
     return files
 
-# Add constants for file paths
-RESUME_FOLDER = Path("uploads/resumes")
-JD_FOLDER = Path("uploads/jd")
-RESUME_FOLDER.mkdir(parents=True, exist_ok=True)
-JD_FOLDER.mkdir(parents=True, exist_ok=True)
-
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB limit
-ALLOWED_MIME_TYPES = ['application/pdf']
 
 @app.post("/upload/resume")
 async def upload_resume(
@@ -771,16 +770,12 @@ async def validate_pdf(file: UploadFile):
     mime_type = magic.from_buffer(content, mime=True)
     if mime_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-    
-    
+
 @app.post("/update_sections")
 async def update_sections(
     sections: dict,
     current_user: User = Depends(get_current_user)
 ):
-    if not current_user.is_admin:  # Add admin check if needed
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
     global SECTIONS
     SECTIONS = sections
     return {"message": "Sections updated successfully", "sections": SECTIONS}
@@ -789,9 +784,6 @@ async def update_sections(
 async def clear_sections(
     current_user: User = Depends(get_current_user)
 ):
-    if not current_user.is_admin:  # Add admin check if needed
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
     global SECTIONS
     SECTIONS.clear()
     return {"message": "Sections cleared"}

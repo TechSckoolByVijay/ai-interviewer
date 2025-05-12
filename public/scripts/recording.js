@@ -6,7 +6,7 @@ let currentInterviewName = null;
 let currentQuestions = [];
 let currentQuestionIndex = 0;
 let currentSectionIndex = 0;
-const sections = ["strengths", "weaknesses", "future", "challenges"];
+let currentSection = null;
 
 // Add QuestionStatus enum at the top of the file
 const QuestionStatus = {
@@ -213,26 +213,26 @@ document.getElementById('nextBtn')?.addEventListener('click', async () => {
             await updateQuestionStatus(currentQuestions[currentQuestionIndex].id, QuestionStatus.SKIPPED);
         }
 
-        // Move to next question or section
+        // Move to next question if available in current section
         if (currentQuestionIndex < currentQuestions.length - 1) {
             currentQuestionIndex++;
             await displayQuestion(currentQuestionIndex);
             startRecording();
-        } else if (currentSectionIndex < sections.length - 1) {
-            currentSectionIndex++;
-            console.log(`Moving to section: ${sections[currentSectionIndex]}`);
-            const newQuestions = await loadSectionQuestions(sections[currentSectionIndex]);
+        } else {
+            // Try to get next section's questions
+            const nextSection = await getSectionsAndQuestions();
             
-            if (newQuestions) {
+            if (nextSection.hasMore) {
+                currentSection = nextSection.currentSection;
+                currentQuestions = nextSection.questions;
                 currentQuestionIndex = 0;
                 await displayQuestion(0);
                 startRecording();
             } else {
-                throw new Error('Failed to load next section questions');
+                alert('Interview completed! Thank you for your participation.');
+                await cleanupResources();
+                window.location.href = '/index.html';
             }
-        } else {
-            alert('Interview completed! Thank you for your participation.');
-            window.location.href = '/index.html';
         }
     } catch (error) {
         console.error('Error handling next question:', error);
@@ -260,8 +260,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             throw new Error('No interview ID provided');
         }
 
-        // Initialize first section
-        await loadSectionQuestions(sections[currentSectionIndex]);
+        // Initialize first section and questions
+        const initialSection = await getSectionsAndQuestions();
+        currentSection = initialSection.currentSection;
+        currentQuestions = initialSection.questions;
+        currentQuestionIndex = 0;
+        
+        await displayQuestion(0);
+        updateSectionInfo();
     } catch (error) {
         console.error('Error initializing recording page:', error);
         alert('Failed to initialize recording. Redirecting to home page.');
@@ -670,3 +676,26 @@ function cleanupResources() {
 window.addEventListener('beforeunload', () => {
     cleanupResources();
 });
+
+// Add getSectionsAndQuestions function
+async function getSectionsAndQuestions() {
+    try {
+        const response = await fetchWithAuth(
+            `${API_CONFIG.API_URL}/get_section_questions?interview_id=${currentInterviewId}`
+        );
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch sections and questions');
+        }
+
+        const data = await response.json();
+        return {
+            currentSection: data.current_section,
+            questions: data.questions,
+            hasMore: data.has_more
+        };
+    } catch (error) {
+        console.error('Error fetching sections and questions:', error);
+        throw error;
+    }
+}

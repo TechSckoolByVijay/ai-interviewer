@@ -137,8 +137,8 @@ const reportsPage = document.getElementById('reportsPage');
 
 // Declare variables only once at the top of the script
 let currentSectionIndex = 0;
-let currentQuestionIndex = 0; // Remove duplicate declarations
-const sections = ["strengths", "weaknesses", "future", "challenges"];
+let currentQuestionIndex = 0;
+let currentSection = null;
 let currentQuestions = [];
 
 // Utility functions
@@ -316,32 +316,46 @@ stopBtn.addEventListener('click', async () => {
 });
 
 nextBtn.addEventListener('click', async () => {
-  if (currentQuestionIndex < currentQuestions.length - 1) {
-    // Stop the current recording and upload it
-    await stopRecordingAndUpload();
+    if (currentQuestionIndex < currentQuestions.length - 1) {
+        // Stop the current recording and upload it
+        await stopRecordingAndUpload();
 
-    // Move to the next question
-    currentQuestionIndex++;
-    displayQuestion(currentQuestionIndex);
+        // Move to the next question in current section
+        currentQuestionIndex++;
+        displayQuestion(currentQuestionIndex);
 
-    // Start a new recording for the next question
-    startRecording();
-  } else if (currentSectionIndex < sections.length - 1) {
-    // Stop the current recording and upload it
-    await stopRecordingAndUpload();
+        // Start a new recording for the next question
+        startRecording();
+    } else {
+        // Stop the current recording and upload it
+        await stopRecordingAndUpload();
 
-    // Move to the next section
-    currentSectionIndex++;
-    currentQuestions = await fetchSectionQuestions(sections[currentSectionIndex]);
-    currentQuestionIndex = 0;
-    displayQuestion(0);
-    initializeBottomNav(currentQuestions.length);
+        try {
+            // Fetch next section and its questions
+            const nextSectionData = await fetchNextSectionAndQuestions();
 
-    // Start a new recording for the next section
-    startRecording();
-  } else {
-    alert('You have completed all sections. Please end the interview.');
-  }
+            if (nextSectionData.isLastSection && currentQuestionIndex === currentQuestions.length - 1) {
+                alert('You have completed all sections. Please end the interview.');
+                return;
+            }
+
+            // Update current section and questions
+            currentSection = nextSectionData.section;
+            currentQuestions = nextSectionData.questions;
+            currentSectionIndex++;
+            currentQuestionIndex = 0;
+
+            // Display first question of new section
+            displayQuestion(0);
+            initializeBottomNav(currentQuestions.length);
+
+            // Start a new recording for the next section
+            startRecording();
+        } catch (error) {
+            console.error('Error moving to next section:', error);
+            alert('Failed to load next section. Please try again.');
+        }
+    }
 });
 
 function initializeRecorders(combinedStream) {
@@ -488,38 +502,39 @@ async function fetchQuestions(userId) {
   }
 }
 
+// Update the displayQuestion function
 function displayQuestion(index) {
-  if (index < currentQuestions.length) {
-    // Update the question text
-    document.getElementById('question').textContent = currentQuestions[index];
+    if (index < currentQuestions.length) {
+        // Update the question text
+        document.getElementById('question').textContent = currentQuestions[index].text;
 
-    // Get the audio element
-    const audio = document.getElementById('questionAudio');
-    if (!audio) {
-      console.error('Audio element not found in the DOM');
-      return;
+        // Get the audio element
+        const audio = document.getElementById('questionAudio');
+        if (!audio) {
+            console.error('Audio element not found in the DOM');
+            return;
+        }
+
+        // Stop any currently playing audio
+        audio.pause();
+        audio.currentTime = 0;
+
+        // Update the audio source
+        const audioSrc = `${API_CONFIG.API_URL}/audio/question/${currentQuestions[index].id}`;
+        console.log(`Audio file path: ${audioSrc}`);
+        audio.src = audioSrc;
+        audio.classList.remove('hidden');
+
+        // Wait for the audio to load before playing
+        audio.addEventListener('canplaythrough', () => {
+            audio.play().catch((error) => {
+                console.error('Error playing audio:', error);
+            });
+        }, { once: true });
+
+        // Update the bottom navigation bar
+        updateBottomNav(index);
     }
-
-    // Stop any currently playing audio
-    audio.pause();
-    audio.currentTime = 0;
-
-    // Update the audio source
-    const audioSrc = `http://127.0.0.1:8000/audio/${sections[currentSectionIndex]}_question_${index + 1}.mp3`;
-    console.log(`Audio file path: ${audioSrc}`);
-    audio.src = audioSrc;
-    audio.classList.remove('hidden');
-
-    // Wait for the audio to load before playing
-    audio.addEventListener('canplaythrough', () => {
-      audio.play().catch((error) => {
-        console.error('Error playing audio:', error);
-      });
-    }, { once: true });
-
-    // Update the bottom navigation bar
-    updateBottomNav(index);
-  }
 }
 
 function initializeProgressBar(totalQuestions) {
@@ -548,39 +563,40 @@ async function fetchSectionQuestions(section) {
   }
 }
 
+// Update the existing startInterview function
 async function startInterview() {
-  if (!isAuthenticated()) {
-    window.location.href = '/login.html';
-    return;
-  }
+    if (!isAuthenticated()) {
+        window.location.href = '/login.html';
+        return;
+    }
 
-  const friendlyName = document.getElementById('interviewName').value;
-  if (!friendlyName) {
-    alert('Please enter an interview name');
-    return;
-  }
+    const friendlyName = document.getElementById('interviewName').value;
+    if (!friendlyName) {
+        alert('Please enter an interview name');
+        return;
+    }
 
-  try {
-    const response = await fetch(`${API_CONFIG.API_URL}/interviews/create`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ friendly_name: friendlyName })
-    });
-    const data = await response.json();
-    currentInterviewId = data.id;
+    try {
+        const response = await fetch(`${API_CONFIG.API_URL}/interviews/create`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ friendly_name: friendlyName })
+        });
+        const data = await response.json();
+        currentInterviewId = data.id;
 
-    // Fetch the first section's questions
-    currentSectionIndex = 0;
-    currentQuestions = await fetchSectionQuestions(sections[currentSectionIndex]);
-    displayQuestion(0);
-    initializeBottomNav(currentQuestions.length);
-  } catch (error) {
-    console.error('Failed to start interview:', error);
-    alert('Failed to start interview. Please try again.');
-  }
+        // Initialize interview with first section and questions
+        const initialized = await initializeInterview();
+        if (!initialized) {
+            throw new Error('Failed to initialize interview');
+        }
+    } catch (error) {
+        console.error('Failed to start interview:', error);
+        alert('Failed to start interview. Please try again.');
+    }
 }
 
 function initializeBottomNav(totalQuestions) {
@@ -899,3 +915,140 @@ const downloadDocument = async (type, id) => {
         alert('Failed to download document');
     }
 };
+
+// Add this new function
+async function fetchNextSectionAndQuestions() {
+    try {
+        const response = await fetchWithAuth(`${API_CONFIG.API_URL}/next-section-questions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                interview_id: currentInterviewId,
+                current_section: currentSection,
+                current_section_index: currentSectionIndex
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch next section');
+        }
+
+        const data = await response.json();
+        return {
+            section: data.section,
+            questions: data.questions,
+            isLastSection: data.is_last_section
+        };
+    } catch (error) {
+        console.error('Error fetching next section:', error);
+        throw error;
+    }
+}
+
+
+async function fetchNextSectionAndQuestions() {
+    try {
+        const response = await fetchWithAuth(`${API_CONFIG.API_URL}/get_section_questions?interview_id=${currentInterviewId}&current_section=${currentSection}`);
+        const data = await response.json();
+        
+        if (!data.has_more) {
+            return null; // No more sections
+        }
+        
+        currentSection = data.current_section;
+        return {
+            section: data.current_section,
+            questions: data.questions
+        };
+    } catch (error) {
+        console.error('Error fetching next section:', error);
+        throw error;
+    }
+}
+
+// Modify the nextBtn click handler
+nextBtn.addEventListener('click', async () => {
+    if (currentQuestionIndex < currentQuestions.length - 1) {
+        // Stop current recording and upload it
+        await stopRecordingAndUpload();
+
+        // Move to next question in current section
+        currentQuestionIndex++;
+        displayQuestion(currentQuestionIndex);
+
+        // Start new recording
+        startRecording();
+    } else {
+        // Stop current recording and upload it
+        await stopRecordingAndUpload();
+
+        // Fetch next section and its questions
+        const nextSectionData = await fetchNextSectionAndQuestions();
+
+        if (!nextSectionData) {
+            alert('You have completed all sections. The interview will now end.');
+            await endInterview();
+            return;
+        }
+
+        // Update current questions and reset index
+        currentQuestions = nextSectionData.questions;
+        currentQuestionIndex = 0;
+
+        // Display first question of new section
+        displayQuestion(0);
+        initializeBottomNav(currentQuestions.length);
+
+        // Start new recording
+        startRecording();
+    }
+});
+
+// Add a function to handle interview ending
+async function endInterview() {
+    // Stop all recordings and clean up
+    await stopRecordingAndUpload();
+
+    // Turn off all streams
+    if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+    if (screenStream) screenStream.getTracks().forEach(track => track.stop());
+    if (audioStream) audioStream.getTracks().forEach(track => track.stop());
+
+    // Display completion message
+    interviewPage.innerHTML = `
+        <div class="text-center p-8">
+            <h1 class="text-3xl font-bold mb-4">Interview Complete</h1>
+            <p class="text-lg mb-4">Thank you for completing the interview.</p>
+            <p class="text-md text-gray-600">We will analyze your responses and provide feedback soon.</p>
+            <button onclick="window.location.href='/'" class="mt-6 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                Return to Home
+            </button>
+        </div>
+    `;
+}
+
+// Add this new function
+async function initializeInterview() {
+    try {
+        const response = await fetchWithAuth(`${API_CONFIG.API_URL}/get_section_questions?interview_id=${currentInterviewId}`);
+        const data = await response.json();
+        
+        if (!data.has_more) {
+            throw new Error('No questions available for interview');
+        }
+        
+        currentSection = data.current_section;
+        currentQuestions = data.questions;
+        currentQuestionIndex = 0;
+        
+        displayQuestion(0);
+        initializeBottomNav(currentQuestions.length);
+        
+        return true;
+    } catch (error) {
+        console.error('Error initializing interview:', error);
+        return false;
+    }
+}
